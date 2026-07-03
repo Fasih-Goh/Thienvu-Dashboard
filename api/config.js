@@ -3,15 +3,11 @@
 // layout, etc.). The frontend GETs on load and POSTs on Save.
 //
 // STORAGE: Upstash Redis via Vercel Marketplace.
-// Setup (one-time per Vercel project):
-//   1. In Vercel project → Storage tab → find "Upstash for Redis" → Install
-//   2. Create a free Upstash account (or log in), pick free tier, connect to project
-//   3. Vercel auto-injects UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN
-//   4. Redeploy so the new env vars are picked up
-//
-// ENV VARS (auto-set by Upstash Marketplace integration):
-//   UPSTASH_REDIS_REST_URL
-//   UPSTASH_REDIS_REST_TOKEN
+// Accepts credentials under EITHER naming scheme:
+//   - New:    UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN
+//   - Legacy: KV_REST_API_URL       / KV_REST_API_TOKEN
+// (The Vercel Marketplace integration sometimes injects the old KV_* names
+//  for backward compatibility with code that used @vercel/kv.)
 //
 // Optional:
 //   DASHBOARD_TOKEN — shared secret; if set, requests must pass
@@ -21,16 +17,20 @@ import { Redis } from "@upstash/redis";
 
 const CONFIG_KEY = "dashboard:config";
 
-// Lazily instantiate — env vars must be present at request time, not module load.
 let _redis = null;
 function getRedis() {
   if (_redis) return _redis;
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url =
+    process.env.UPSTASH_REDIS_REST_URL ||
+    process.env.KV_REST_API_URL;
+  const token =
+    process.env.UPSTASH_REDIS_REST_TOKEN ||
+    process.env.KV_REST_API_TOKEN;
   if (!url || !token) {
     throw new Error(
-      "Missing UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN. " +
-      "Install the Upstash for Redis integration from Vercel Marketplace and redeploy."
+      "Missing Upstash credentials. Expected UPSTASH_REDIS_REST_URL/TOKEN " +
+      "(or legacy KV_REST_API_URL/TOKEN). Install the Upstash for Redis " +
+      "integration from Vercel Marketplace and redeploy."
     );
   }
   _redis = new Redis({ url, token });
@@ -45,7 +45,7 @@ function send(res, status, obj) {
 
 function isAuthorized(req) {
   const required = process.env.DASHBOARD_TOKEN;
-  if (!required) return true; // gate disabled
+  if (!required) return true;
   const header = req.headers.authorization || "";
   const bearer = header.startsWith("Bearer ") ? header.slice(7) : "";
   const queryToken = req.query && req.query.token;
@@ -57,7 +57,6 @@ export default async function handler(req, res) {
     if (!isAuthorized(req)) {
       return send(res, 401, { error: "Unauthorized" });
     }
-
     const redis = getRedis();
 
     if (req.method === "GET") {
