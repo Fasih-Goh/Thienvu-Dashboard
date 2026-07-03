@@ -2,13 +2,13 @@
   "name": "client-dashboard-template",
   "version": "1.0.0",
   "private": true,
-  "description": "Per-client performance dashboard — reads Google Sheets via service account, stores config in Vercel KV.",
+  "description": "Per-client performance dashboard — reads Google Sheets via service account, stores config in Upstash Redis.",
   "type": "module",
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
-    "@vercel/kv": "^1.0.1",
+    "@upstash/redis": "^1.34.0",
     "googleapis": "^131.0.0"
   }
 }
