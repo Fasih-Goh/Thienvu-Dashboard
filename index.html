@@ -14,7 +14,7 @@
        Their config saves to /api/config on their own Vercel project.
   ═══════════════════════════════════════════════════════════════════
 -->
-<title>Thienvu's · Dashboard</title>  <!-- ⚑ CLIENT CONFIG: page title -->
+<title>Client Name · Dashboard</title>  <!-- ⚑ CLIENT CONFIG: page title -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -193,7 +193,7 @@ body.editing .edit-only{display:inline-flex}
 <body>
 <nav>
   <div class="nav-in">
-    <div class="brand">Thienvu's <span class="dia">◆</span> Dashboard</div>  <!-- ⚑ CLIENT CONFIG: brand text (shown top-left in nav) -->
+    <div class="brand">CLIENT <span class="dia">◆</span> Dashboard</div>  <!-- ⚑ CLIENT CONFIG: brand text (shown top-left in nav) -->
     <div class="tabs">
       <div class="tab active" data-page="ceo"><span class="dia">◆</span> CEO</div>
       <div class="tab" data-page="setter"><span class="dia">◆</span> Setter</div>
@@ -1331,7 +1331,13 @@ function captureTab(tab){
     CFG.plansSrc={src:g(".pl-src"),nameCol:g(".pl-name"),dueCol:g(".pl-due"),statusCol:g(".pl-status"),amountCol:g(".pl-amount")};return}
   if(!TABMETRICS[tab])return; // custom tabs manage widgets directly, nothing to capture
   document.querySelectorAll("#mapList .maprow").forEach(row=>{const id=row.dataset.id;if(!id)return;
-    const src=row.querySelector(".m-src").value,col=row.querySelector(".m-col").value,dc=row.querySelector(".m-date").value;
+    const src=row.querySelector(".m-src").value,col=row.querySelector(".m-col").value;
+    // If the user didn't touch the date column dropdown (common — most people
+    // just pick source + column and don't realize date is a separate field),
+    // auto-fill it with the source's first date-like column. Otherwise the
+    // save condition `src && col && dc` fails and the mapping is dropped.
+    let dc=row.querySelector(".m-date").value;
+    if(src&&!dc)dc=firstDateCol(src);
     const key=tab+"."+id;if(src&&col&&dc)CFG.map[key]={src,col,dateCol:dc};else delete CFG.map[key]});
 }
 function initEvents(){
