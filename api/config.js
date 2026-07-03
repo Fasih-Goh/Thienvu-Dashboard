@@ -1,30 +1,41 @@
 // /api/config.js — Vercel serverless function
 // Stores and returns the dashboard's shared config (widgets, mappings, order,
-// layout, etc). The frontend GETs on load and POSTs on Save.
+// layout, etc.). The frontend GETs on load and POSTs on Save.
 //
-// STORAGE STRATEGY
-// ────────────────
-// This template uses Vercel KV (their managed Redis). If you don't want to use
-// KV, swap the getStore / setStore calls at the bottom for another backend:
-//   - Vercel Blob:    @vercel/blob   (simple JSON blob in object storage)
-//   - Google Sheet:   write to a private "config" tab via the Sheets API
-//   - Filesystem:     /tmp/config.json (will NOT persist across cold starts —
-//                     only OK for local dev)
+// STORAGE: Upstash Redis via Vercel Marketplace.
+// Setup (one-time per Vercel project):
+//   1. In Vercel project → Storage tab → find "Upstash for Redis" → Install
+//   2. Create a free Upstash account (or log in), pick free tier, connect to project
+//   3. Vercel auto-injects UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN
+//   4. Redeploy so the new env vars are picked up
 //
-// Setup (Vercel KV):
-//   1. In Vercel dashboard → your project → Storage → Create → KV
-//   2. Vercel auto-adds KV_REST_API_URL and KV_REST_API_TOKEN env vars
-//   3. Install the SDK:  npm i @vercel/kv
+// ENV VARS (auto-set by Upstash Marketplace integration):
+//   UPSTASH_REDIS_REST_URL
+//   UPSTASH_REDIS_REST_TOKEN
 //
-// ENV VARS
-// ────────
-// KV_REST_API_URL, KV_REST_API_TOKEN — auto-injected when you link a KV store
-// DASHBOARD_TOKEN                    — optional shared secret; if set, requests
-//                                       must pass Authorization: Bearer <token>
+// Optional:
+//   DASHBOARD_TOKEN — shared secret; if set, requests must pass
+//                     Authorization: Bearer <token> OR ?token=<token>
 
-import { kv } from "@vercel/kv";
+import { Redis } from "@upstash/redis";
 
 const CONFIG_KEY = "dashboard:config";
+
+// Lazily instantiate — env vars must be present at request time, not module load.
+let _redis = null;
+function getRedis() {
+  if (_redis) return _redis;
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) {
+    throw new Error(
+      "Missing UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN. " +
+      "Install the Upstash for Redis integration from Vercel Marketplace and redeploy."
+    );
+  }
+  _redis = new Redis({ url, token });
+  return _redis;
+}
 
 function send(res, status, obj) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -47,14 +58,14 @@ export default async function handler(req, res) {
       return send(res, 401, { error: "Unauthorized" });
     }
 
+    const redis = getRedis();
+
     if (req.method === "GET") {
-      const config = await kv.get(CONFIG_KEY);
+      const config = await redis.get(CONFIG_KEY);
       return send(res, 200, { config: config || null });
     }
 
     if (req.method === "POST" || req.method === "PUT") {
-      // Body may arrive as a parsed object or a raw string depending on how
-      // Vercel's Node runtime handled it. Handle both.
       let body = req.body;
       if (typeof body === "string") {
         try { body = JSON.parse(body); } catch { body = null; }
@@ -63,7 +74,7 @@ export default async function handler(req, res) {
         return send(res, 400, { error: "Body must be a JSON object with a 'config' field" });
       }
       const config = body.config !== undefined ? body.config : body;
-      await kv.set(CONFIG_KEY, config);
+      await redis.set(CONFIG_KEY, config);
       return send(res, 200, { ok: true });
     }
 
